@@ -1,0 +1,26 @@
+[project]
+name = "client-app"
+version = "0.1.0"
+description = "Resource server: token-protected endpoints, analytics (Task A), aggregation (Task B)."
+requires-python = ">=3.11,<4.0"
+dependencies = [
+    # Web framework
+    "fastapi (>=0.115,<1.0)",
+    "uvicorn[standard] (>=0.30)",
+    # Configuration
+    "pydantic-settings (>=2.4)",
+    # Outbound HTTP: external APIs (Task B) + inter-service calls to Identity
+    "httpx (>=0.27)",
+    # Local RS256 token validation against the Identity Service JWKS
+    "pyjwt[crypto] (>=2.9)",
+    "cryptography (>=43)",
+]
+
+[tool.poetry]
+# Applications, not libraries: don't try to build/install this project itself.
+package-mode = false
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8"
+pytest-asyncio = ">=0.23"
+respx = ">=0.21"
