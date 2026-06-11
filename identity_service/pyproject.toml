@@ -21,6 +21,7 @@ dependencies = [
     "pwdlib[argon2] (>=0.2)",
     # OAuth2 password form parsing
     "python-multipart (>=0.0.9)",
+    "slowapi (>=0.1.9,<0.2.0)",
 ]
 
 [tool.poetry]

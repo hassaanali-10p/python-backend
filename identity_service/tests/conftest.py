@@ -27,6 +27,9 @@ if not TEST_DATABASE_URL:
     raise RuntimeError("TEST_DATABASE_URL is not set")
 
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+# Disable rate limiting in tests so repeated auth calls across the suite are
+# deterministic (the limiter itself is exercised separately / in production).
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 # example.com is reserved for testing (RFC 2606); .local is rejected by email-validator.
 os.environ.setdefault("BOOTSTRAP_ADMIN_EMAIL", "admin@example.com")
 # Generated per run — never a hardcoded secret literal.

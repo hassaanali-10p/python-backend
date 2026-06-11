@@ -10,7 +10,7 @@ import logging
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 
 from app.api.aggregation import router as aggregation_router
 from app.api.analytics import router as analytics_router
@@ -39,9 +39,12 @@ async def lifespan(app: FastAPI):
     # and service-to-service calls (matters for Task B's concurrent fan-out too).
     # A descriptive User-Agent is required by some public APIs (e.g. GitHub);
     # follow_redirects keeps us tolerant of upstreams that 301.
+    # follow_redirects=False: the upstreams we call return 200 directly, and not
+    # following redirects avoids an SSRF vector (a crafted redirect to an internal
+    # address). A descriptive User-Agent is required by some APIs (e.g. GitHub).
     app.state.http_client = httpx.AsyncClient(
         timeout=settings.http_timeout_seconds,
-        follow_redirects=True,
+        follow_redirects=False,
         headers={"User-Agent": "company-snapshot/1.0 (FastAPI assessment)"},
     )
     app.state.jwks_client = JWKSClient(settings.jwks_url, app.state.http_client)
@@ -58,6 +61,16 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next) -> Response:
+    """Set a small set of safe HTTP response headers on every response."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
 
 app.include_router(health_router)
 app.include_router(protected_router)

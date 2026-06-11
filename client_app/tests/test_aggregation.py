@@ -66,3 +66,12 @@ def test_source_timeout_is_isolated(client, respx_mock):
 
 def test_empty_company_is_rejected(client):
     assert client.get("/aggregate/company", params={"company": ""}).status_code == 422
+
+
+import pytest
+
+
+@pytest.mark.parametrize("bad", ["a/b", "../etc", "a.b", "user@host", "has space"])
+def test_unsafe_company_slug_is_rejected(client, bad):
+    # SSRF guard: only a safe slug charset is allowed (no slashes, dots, etc.).
+    assert client.get("/aggregate/company", params={"company": bad}).status_code == 422

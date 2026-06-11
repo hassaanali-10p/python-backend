@@ -53,3 +53,9 @@ def test_endpoint_rejects_over_cap(client):
 def test_endpoint_rejects_negative_start(client):
     r = client.get("/analytics/primes", params={"start": -5, "end": 10})
     assert r.status_code == 422
+
+
+def test_security_headers_present(client):
+    r = client.get("/health")
+    assert r.headers["x-content-type-options"] == "nosniff"
+    assert r.headers["x-frame-options"] == "DENY"

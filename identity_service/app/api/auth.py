@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app.api.deps import SessionDep
+from app.core.config import get_settings
+from app.core.limiter import limiter
 from app.schemas.token import RefreshRequest, TokenPair
 from app.schemas.user import UserCreate, UserRead
 from app.services import auth as auth_service
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+_AUTH_RATE_LIMIT = get_settings().auth_rate_limit
 
 
 @router.post(
@@ -21,7 +27,8 @@ router = APIRouter(prefix="/auth", tags=["auth"])
     status_code=status.HTTP_201_CREATED,
     summary="Register a new user",
 )
-async def register(data: UserCreate, session: SessionDep) -> UserRead:
+@limiter.limit(_AUTH_RATE_LIMIT)
+async def register(request: Request, data: UserCreate, session: SessionDep) -> UserRead:
     try:
         user = await auth_service.register_user(session, data)
     except auth_service.EmailAlreadyExistsError:
@@ -33,13 +40,17 @@ async def register(data: UserCreate, session: SessionDep) -> UserRead:
 
 
 @router.post("/login", response_model=TokenPair, summary="Log in and obtain tokens")
+@limiter.limit(_AUTH_RATE_LIMIT)
 async def login(
+    request: Request,
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     session: SessionDep,
 ) -> TokenPair:
     # OAuth2 password form: `username` carries the email.
     user = await auth_service.authenticate(session, form_data.username, form_data.password)
     if user is None:
+        # Log the failed attempt for monitoring (no password, generic to the client).
+        logger.warning("failed login attempt", extra={"email": form_data.username})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",

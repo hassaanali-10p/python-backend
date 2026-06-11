@@ -21,7 +21,15 @@ router = APIRouter(prefix="/aggregate", tags=["aggregation"])
 )
 async def company_snapshot(
     company: Annotated[
-        str, Query(min_length=1, max_length=100, description="Company slug, e.g. 'stripe'")
+        str,
+        Query(
+            min_length=1,
+            max_length=100,
+            # Restrict to a safe slug charset: prevents path/redirect tricks that
+            # could turn this into an SSRF vector (the value goes into outbound URLs).
+            pattern=r"^[A-Za-z0-9-]+$",
+            description="Company slug, e.g. 'stripe'",
+        ),
     ],
     http_client: Annotated[httpx.AsyncClient, Depends(get_http_client)],
 ) -> CompanySnapshot:

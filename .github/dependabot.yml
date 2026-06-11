@@ -1,0 +1,19 @@
+# Automated dependency vulnerability/update checks (OWASP A06).
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/identity_service"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "pip"
+    directory: "/client_app"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "docker"
+    directory: "/identity_service"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "docker"
+    directory: "/client_app"
+    schedule:
+      interval: "weekly"

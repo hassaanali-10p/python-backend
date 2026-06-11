@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     bootstrap_admin_email: str | None = None
     bootstrap_admin_password: str | None = None
 
+    # --- Rate limiting (brute-force protection on auth endpoints) ---
+    rate_limit_enabled: bool = True
+    auth_rate_limit: str = "5/minute"
+
 
 @lru_cache
 def get_settings() -> Settings:

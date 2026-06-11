@@ -8,13 +8,16 @@ those tokens locally.
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.api.auth import router as auth_router
 from app.api.health import router as health_router
 from app.api.jwks import router as jwks_router
 from app.api.users import router as users_router
 from app.core.config import get_settings
+from app.core.limiter import limiter
 from app.core.logging import configure_logging
 from app.db.session import SessionLocal
 from app.models.user import UserRole
@@ -60,6 +63,21 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# Rate limiting (brute-force protection); auth endpoints opt in via @limiter.limit.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next) -> Response:
+    """Set a small set of safe HTTP response headers on every response."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
 
 app.include_router(health_router)
 app.include_router(jwks_router)

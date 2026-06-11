@@ -369,3 +369,26 @@ poetry -C identity_service run pytest --cov=app --cov-report=html
 | Task A algorithm | **Segmented sieve** | Bounded memory for arbitrarily large ranges; meaningful prime density at every scale. |
 | Task B resilience | `asyncio.gather` + per-source isolation | Concurrent fan-out with graceful partial success. |
 | Config | Environment only, no committed secrets | 12-factor; fail-fast on missing required config. |
+
+---
+
+## Security (OWASP Top 10)
+
+How the project addresses the OWASP Top 10 (2021):
+
+| # | Risk | How it's handled |
+|---|---|---|
+| A01 | Broken Access Control | Token required on protected routes; RBAC (`require_role`); correct 401 vs 403; UUID ids prevent enumeration |
+| A02 | Cryptographic Failures | Argon2 password hashing; RS256 signing (private key never committed); refresh tokens stored SHA-256-hashed; TLS at the platform |
+| A03 | Injection | SQLAlchemy ORM (parameterized queries); Pydantic validates/types all inputs |
+| A04 | Insecure Design | Refresh rotation + reuse detection; constant-time login; bounded inputs; **rate limiting** on auth |
+| A05 | Security Misconfiguration | Security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`); non-root containers; secrets only via env |
+| A06 | Vulnerable Components | Pinned `poetry.lock`; **Dependabot** (`.github/dependabot.yml`) for pip + Docker updates |
+| A07 | Auth Failures | Argon2 + generic errors + constant timing; short-lived tokens; **rate limiting** (5/min) on `/auth/login` + `/auth/register` |
+| A08 | Software/Data Integrity | Signed tokens; hash-locked dependencies (`poetry.lock`) |
+| A09 | Logging & Monitoring | Structured JSON logs; failed logins and refresh-token reuse are logged |
+| A10 | SSRF | Task B accepts only a strict slug (`^[A-Za-z0-9-]+$`); outbound client does not follow redirects |
+
+> Swagger UI (`/docs`) is intentionally left enabled so the API can be explored
+> and tested. In a hardened production deployment it would typically be disabled
+> or access-restricted.
