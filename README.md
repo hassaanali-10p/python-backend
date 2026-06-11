@@ -116,7 +116,7 @@ backend/
 └── docs/
     ├── architecture.png
     ├── identity-service.md      # Identity Service explained (features, decisions, files)
-    └── client-app.md            # Client App explained (incl. Task A/B justifications)
+    └── client-app.md            # Client App explained (incl. Task A/B design choices)
 ```
 
 The Client App has **no database** — it is stateless and trusts the Identity

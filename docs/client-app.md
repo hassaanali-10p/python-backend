@@ -46,7 +46,7 @@ allowed to do without looking anything up. Fewer moving parts, easier to scale.
 
 ---
 
-## 3. Task A — Analytics (the important justifications)
+## 3. Task A — Analytics (the key choices)
 
 **The endpoint:** `GET /analytics/primes?start=1&end=1000000` → returns the count
 of matching numbers, how long it took, and a structured JSON response.
