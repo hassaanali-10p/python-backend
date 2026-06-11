@@ -30,27 +30,7 @@ it to validate a token on the request hot path.
 
 ## Architecture
 
-```
-   register / login                ┌─────────────────────────────────┐
-   ───────────────────────────────►│        Identity Service  :8001   │
-                                    │  • Argon2 password hashing        │
-   access + refresh tokens  ◄───────│  • RS256 JWT signing (private key)│
-                                    │  • refresh rotation + reuse detect│──► PostgreSQL
-                                    │  • RBAC, /me                      │
-                                    │  • JWKS: /.well-known/jwks.json   │
-                                    └─────────────────┬─────────────────┘
-                                                      │ publishes PUBLIC key (JWKS)
-                                                      ▼  (fetched once, cached)
-   Authorization: Bearer <token>    ┌─────────────────────────────────┐
-   ───────────────────────────────►│         Client App       :8002    │
-                                    │  • validates RS256 LOCALLY        │
-                                    │    against cached JWKS (no hop)   │
-                                    │  • /profile → calls Identity /me  │
-                                    │  • Task A: analytics              │
-                                    │  • Task B: aggregation            │──► Greenhouse
-                                    └───────────────────────────────────┘    GitHub
-                                                                              Hacker News
-```
+![System Architecture](docs/architecture.png)
 
 **How auth works:** the Identity Service signs access tokens with an RSA private
 key (RS256) and publishes the matching **public** key at a JWKS endpoint. The
@@ -132,6 +112,7 @@ backend/
 │   ├── tests/
 │   └── Dockerfile
 └── docs/
+    ├── architecture.png
     └── auth-concepts-explained.md
 ```
 
@@ -357,9 +338,12 @@ poetry -C client_app run pytest
 poetry -C identity_service run pytest
 ```
 
-The suites cover the high-risk paths: auth flow, refresh **rotation + reuse
-detection**, RBAC denial, invalid/expired/tampered tokens, Task A correctness +
-bounds, and Task B partial-failure.
+The suites are predominantly **integration tests** (API-level, through the
+framework — against a real Postgres for Identity, and against respx-mocked
+external APIs for the Client), plus **unit tests** for the prime-counting
+algorithm. Together they cover the high-risk paths: auth flow, refresh
+**rotation + reuse detection**, RBAC denial, invalid/expired/tampered tokens,
+Task A correctness + bounds, and Task B partial-failure.
 
 Coverage report (HTML):
 ```bash
