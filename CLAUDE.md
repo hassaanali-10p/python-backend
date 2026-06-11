@@ -83,7 +83,7 @@ Per-source status → partial success; one dead API degrades gracefully.
 | **3** | Task A — analytics (segmented-sieve prime counter, bounded input, timing) | ✅ Done |
 | **4** | Task B — aggregation (3 keyless APIs, concurrent fan-out, partial-success envelope) | ✅ Done |
 | **5** | Tests: auth flow, RBAC denial, expired/invalid token, Task A correctness+perf, Task B partial-failure | ✅ Done |
-| **6** | README + polish (decision write-ups) | ⏳ Next |
+| **6** | README + polish (decision write-ups) | ✅ Done |
 
 **If time runs short:** trim test breadth → simplify refresh rotation → Task B
 to 3 sources. **Never cut:** RS256/JWKS, async/pooling.
