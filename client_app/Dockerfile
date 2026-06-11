@@ -22,4 +22,5 @@ RUN useradd --create-home appuser
 USER appuser
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Shell form so $PORT (set by hosts like Railway/Render) expands; defaults to 8000.
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}

@@ -20,8 +20,9 @@ coverage.xml
 # Docker CLI / buildx scratch state (written into the project dir during builds)
 .docker/
 
-# Personal learning notes — kept locally, not part of the deliverable
+# Personal notes — kept locally, not part of the deliverable
 docs/auth-concepts-explained.md
+docs/deployment.md
 
 # OS / editor
 .DS_Store

@@ -30,8 +30,7 @@ services:
       JWT_PRIVATE_KEY_PATH: /home/appuser/keys/jwt_private.pem
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
-    # Apply migrations, then start the API.
-    command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    # Migrations + startup are handled by the image's CMD (see Dockerfile).
     ports:
       - "8001:8000"
     depends_on:

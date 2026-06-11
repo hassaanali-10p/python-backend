@@ -7,6 +7,7 @@ can boot without a .env file during development.
 
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -47,6 +48,15 @@ class Settings(BaseSettings):
     # --- Rate limiting (brute-force protection on auth endpoints) ---
     rate_limit_enabled: bool = True
     auth_rate_limit: str = "5/minute"
+
+    @field_validator("database_url")
+    @classmethod
+    def _ensure_async_driver(cls, value: str) -> str:
+        # Hosts (Railway, Render, Neon, ...) hand out plain `postgresql://` URLs;
+        # our async engine needs the asyncpg driver. Normalize it transparently.
+        if value.startswith("postgresql://"):
+            return value.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return value
 
 
 @lru_cache
