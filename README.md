@@ -39,8 +39,10 @@ This means no per-request network call to validate a token, no shared secret, an
 the Client keeps working even if the Identity Service is briefly unavailable. The
 Client only calls the Identity Service when it needs fresh profile data (`/me`).
 
-See [`docs/auth-concepts-explained.md`](docs/auth-concepts-explained.md) for a
-from-scratch explanation of JWTs, RS256, and JWKS with worked examples.
+For a deeper, plain-language walkthrough of each service — features, the design
+choices and *why* we made them, and what every file does — see:
+- [`docs/identity-service.md`](docs/identity-service.md)
+- [`docs/client-app.md`](docs/client-app.md)
 
 ---
 
@@ -113,7 +115,8 @@ backend/
 │   └── Dockerfile
 └── docs/
     ├── architecture.png
-    └── auth-concepts-explained.md
+    ├── identity-service.md      # Identity Service explained (features, decisions, files)
+    └── client-app.md            # Client App explained (incl. Task A/B justifications)
 ```
 
 The Client App has **no database** — it is stateless and trusts the Identity
