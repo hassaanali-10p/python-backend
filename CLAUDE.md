@@ -82,8 +82,8 @@ Per-source status → partial success; one dead API degrades gracefully.
 | **2** | Client cross-service auth: JWKS client + cached keys, local validation, protected endpoint, user lookup, 401/403 | ✅ Done |
 | **3** | Task A — analytics (segmented-sieve prime counter, bounded input, timing) | ✅ Done |
 | **4** | Task B — aggregation (3 keyless APIs, concurrent fan-out, partial-success envelope) | ✅ Done |
-| **5** | Tests: auth flow, RBAC denial, expired/invalid token, Task A correctness+perf, Task B partial-failure | ⏳ Next |
-| **6** | README + polish (decision write-ups) | ⬜ |
+| **5** | Tests: auth flow, RBAC denial, expired/invalid token, Task A correctness+perf, Task B partial-failure | ✅ Done |
+| **6** | README + polish (decision write-ups) | ⏳ Next |
 
 **If time runs short:** trim test breadth → simplify refresh rotation → Task B
 to 3 sources. **Never cut:** RS256/JWKS, async/pooling.
@@ -105,10 +105,27 @@ poetry -C client_app install
 DATABASE_URL=postgresql+asyncpg://identity:identity@localhost:5432/identity \
   poetry -C identity_service run uvicorn app.main:app --reload --port 8001
 
-# Full stack
+# Full stack (Dockerized) — copy .env.example to .env first (compose requires the vars)
+cp .env.example .env
 docker-compose up --build        # NOTE: standalone binary, hyphenated
 
-# Ports: identity → 8001, client → 8002 (both listen on 8000 in-container)
+# Ports: identity → 8001, client → 8002 (both listen on 8000 in-container).
+# Compose Postgres is published on host 5434 (→ container 5432) to avoid a
+# local Postgres on 5432; services reach it internally as `postgres:5432`.
+
+# --- Tests ---
+poetry -C client_app run pytest                 # 26 tests, offline (no DB)
+poetry -C identity_service run pytest            # 19 tests, needs Postgres + .env.test
+
+# --- Test coverage (HTML report) ---
+# Client (offline):
+poetry -C client_app run pytest --cov=app --cov-report=html --cov-report=term-missing
+# Identity (Postgres on 5433 + identity_service/.env.test required):
+poetry -C identity_service run pytest --cov=app --cov-report=html --cov-report=term-missing
+# Then open the UI report in a browser:
+#   client_app/htmlcov/index.html        (≈93%)
+#   identity_service/htmlcov/index.html  (≈94%)
+# term-missing prints uncovered line numbers; htmlcov shows them line-by-line.
 ```
 
 ---
@@ -208,8 +225,13 @@ stateless and has no database.
 - ✅ Identity fails fast with clear `database_url Field required` error when unset;
   boots when `DATABASE_URL` provided.
 - ✅ `docker-compose config` validates.
-- ⚠️ Did **not** run full `docker-compose build` (time). Plan: do one real
-  build + up after Phase 1 to validate the container path.
+- ✅ **Full Dockerized stack built + run + verified (2026-06-11):** `docker-compose
+  up --build` brings up postgres + identity + client, all **healthy**. End-to-end
+  through containers: register 201 / login / client `/whoami` 200 (token validated
+  via JWKS over the compose network) / `/profile` 200 (client→identity `/me`
+  container-to-container) / Task A 78498 / Task B `airbnb` all-3-ok. Compose now
+  **requires** `POSTGRES_*` from the root `.env` (no baked-in defaults); Postgres
+  published on host **5434** to avoid the host's PostgreSQL-15 on 5432.
 
 ---
 
@@ -398,3 +420,40 @@ all three chosen APIs are stable + keyless.
 
 **Note:** unauthenticated GitHub API is rate-limited (~60 req/hr/IP) — fine for
 the assessment; an optional token would raise it (left out to stay keyless).
+
+---
+
+### Phase 5 — Tests ✅ (completed 2026-06-11)
+
+**Result: 45 tests passing** — 19 (identity) + 26 (client).
+
+**Identity Service (`identity_service/tests/`)** — integration against **real
+Postgres** (SQLite would not reproduce tz-aware timestamps + the native enum):
+```
+conftest.py          # test DB URL from env (.env.test, NOT hardcoded); creates DB + schema
+test_auth_flow.py    # register 201/409/422, login 200/401, refresh rotation, reuse detection, logout
+test_authz.py        # /me 401-no-token/200/garbage/expired; /users 403 user / 200 admin
+test_security.py     # password stored Argon2-hashed (DB check), token claims, JWKS kid match
+```
+- **Config not hardcoded:** `TEST_DATABASE_URL` comes from a gitignored
+  `.env.test` (template `.env.test.example`) or CI; no fallback (fail fast).
+  Admin password generated per run (`secrets.token_urlsafe`), not a literal.
+- Test emails use `@example.com` (RFC 2606); `.local` is rejected by email-validator.
+
+**Client App (`client_app/tests/`)** — fully **offline** via `respx` (no DB, no
+network, no Identity Service needed):
+```
+conftest.py            # throwaway RSA keypair, JWKS mock, local token factory
+test_auth_validation.py# valid/none/garbage/tampered/expired/wrong-aud/wrong-iss/unknown-kid; RBAC; /profile
+test_analytics.py      # prime counts vs known values; 422 for bad range/over-cap/negative
+test_aggregation.py    # all-ok (fetched 3), partial failure (404 -> 2 ok/1 fail), timeout isolation, 422
+```
+
+**Both apps:** `[tool.pytest.ini_options]` with `pythonpath=["."]`, `testpaths=["tests"]`.
+Run with `poetry -C <app> run pytest` (identity needs Postgres + `.env.test`).
+
+**Environment ordeal (resolved):** Docker Desktop / WSL got wedged repeatedly
+(`WinError 64` connection resets, daemon Internal Server Errors, `wsl --shutdown`
+hung). Root cause was a wedged WSL2 backend; a **machine reboot** cleared it.
+Lesson for next session: if Postgres connections reset with WinError 64, it's the
+Docker/WSL backend, not the code — reboot or `wsl --shutdown` (elevated).

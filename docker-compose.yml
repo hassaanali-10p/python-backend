@@ -2,15 +2,19 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-identity}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-identity}
-      POSTGRES_DB: ${POSTGRES_DB:-identity}
+      # Required — supplied via the root .env file (copy .env.example). No
+      # baked-in defaults: compose fails fast if these aren't provided.
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
     ports:
-      - "5432:5432"
+      # Host 5434 → container 5432 (avoids a local Postgres on 5432). The other
+      # services reach this DB over the compose network as `postgres:5432`.
+      - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-identity}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -18,7 +22,7 @@ services:
   identity-service:
     build: ./identity_service
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-identity}:${POSTGRES_PASSWORD:-identity}@postgres:5432/${POSTGRES_DB:-identity}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       # Persist the signing key under the app user's home so tokens survive
