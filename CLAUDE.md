@@ -81,8 +81,8 @@ Per-source status → partial success; one dead API degrades gracefully.
 | **0** | Foundation: skeletons, docker-compose + Postgres, config, JSON logging, healthchecks | ✅ Done |
 | **1** | Identity core: async models + Alembic, Argon2, register/login, RS256 + JWKS, refresh + rotation, `/me`, RBAC | ✅ Done |
 | **2** | Client cross-service auth: JWKS client + cached keys, local validation, protected endpoint, user lookup, 401/403 | ✅ Done |
-| **3** | Task A — analytics (segmented-sieve prime counter, pluggable criteria, bounded input, timing) | ⏳ Next |
-| **4** | Task B — aggregation (4 keyless APIs, concurrent fan-out, partial-success envelope) | ⬜ |
+| **3** | Task A — analytics (segmented-sieve prime counter, bounded input, timing) | ✅ Done |
+| **4** | Task B — aggregation (4 keyless APIs, concurrent fan-out, partial-success envelope) | ⏳ Next |
 | **5** | Tests: auth flow, RBAC denial, expired/invalid token, Task A correctness+perf, Task B partial-failure | ⬜ |
 | **6** | README + polish (decision write-ups) | ⬜ |
 
@@ -317,3 +317,39 @@ and a `jwks_url` property. `main.py` lifespan creates a **shared `httpx.AsyncCli
   403-as-user & 200-as-admin.
 - ✅ Logs confirm JWKS fetched **once** then served from cache (no per-request hop).
 - (Throwaway script, removed; formal pytest suite is Phase 5.)
+
+---
+
+### Phase 3 — Task A: Analytics ✅ (completed 2026-06-11)
+
+**Goal:** endpoint that takes a numerical range and returns count of matching
+results + execution duration + structured JSON; must handle large ranges
+efficiently.
+
+**Criterion chosen:** **prime counting** (meaningful density at every scale).
+**Algorithm:** **segmented sieve of Eratosthenes** — only holds base primes up to
+`sqrt(end)` + one 64 KB window at a time ⇒ **memory bounded regardless of `end`**.
+Composites struck out with C-level slice assignment (no Python inner loop).
+
+**Files added (client_app/app):**
+```
+services/analytics.py   # _simple_sieve + count_primes (segmented sieve)
+schemas/analytics.py    # NumberRange, AnalyticsResult
+api/analytics.py        # GET /analytics/primes?start&end
+```
+`config.py` gained `analytics_max_end = 100_000_000` (DoS guard on range size).
+`main.py` includes the analytics router. Endpoint is **public** (Task A/B are
+standalone functional services; auth is demonstrated on the /protected routes).
+
+**Design notes:**
+- CPU-bound work runs via `run_in_threadpool` so it never blocks the event loop.
+- Input bounded: `start>=0`, `end>=start`, `end<=analytics_max_end` → else **422**.
+- Timing measured with `perf_counter` around the computation only.
+- Response shape: `{criteria, range:{start,end}, count, execution_ms, algorithm}`.
+
+**Verification:**
+- ✅ Correct vs known prime counts: π(10)=4, π(100)=25, π(1000)=168,
+  π(10⁶)=78498, π(10⁷)=664579, π(10⁸)=5761455; range `[10,20]`=4; `[0,1]`=0.
+- ✅ Performance: 10⁶ ≈ 20 ms, 10⁷ ≈ 265 ms, 10⁸ (cap) ≈ 5.4 s, flat memory.
+- ✅ Endpoint: 200 structured response; 422 for end<start / over-cap / negative.
+- (Throwaway scripts removed; formal pytest suite is Phase 5.)

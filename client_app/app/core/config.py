@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     # --- Outbound HTTP (external APIs, inter-service calls) ---
     http_timeout_seconds: float = 5.0
 
+    # --- Task A (analytics) ---
+    # Upper bound on the range end, so an enormous request can't tie up CPU
+    # (a simple DoS guard). The segmented sieve keeps memory flat regardless.
+    analytics_max_end: int = 100_000_000
+
     @property
     def jwks_url(self) -> str:
         return f"{self.identity_service_url.rstrip('/')}{self.jwks_path}"

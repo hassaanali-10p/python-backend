@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import FastAPI
 
+from app.api.analytics import router as analytics_router
 from app.api.health import router as health_router
 from app.api.protected import router as protected_router
 from app.core.config import get_settings
@@ -53,3 +54,4 @@ app = FastAPI(
 
 app.include_router(health_router)
 app.include_router(protected_router)
+app.include_router(analytics_router)
