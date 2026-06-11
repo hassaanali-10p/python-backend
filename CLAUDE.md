@@ -49,7 +49,7 @@ README. Graded on: code quality, architecture, **security**, **performance**,
 | **ORM / DB access** | SQLAlchemy 2.0 **async** + `asyncpg` + Alembic | Non-blocking I/O (matters for Task B fan-out); migrations for reproducibility. |
 | **Client app database** | **None** | Client is stateless; trusts Identity for auth. Only Identity uses Postgres. |
 | **Task A criterion** | **Prime counting** via **segmented sieve** | Meaningful density at all scales; segmented sieve handles large ranges with bounded memory. Pluggable-criteria registry so it's extensible. Input bounded to prevent DoS. |
-| **Task B theme** | **City Briefing** over 4 **keyless** location APIs | Open-Meteo Geocoding + Forecast + Air Quality + REST Countries. All key on one location → coherent unified result. Keyless → reproducible Docker/CI, no secrets. |
+| **Task B theme** | **Company Snapshot** over 3 **keyless** APIs | Greenhouse jobs + GitHub org + Hacker News (Algolia), all keyed on one company slug → coherent, useful combined result. Keyless → reproducible Docker/CI, no secrets. (Original plan was a weather "City Briefing"; switched because REST Countries v3.1 was deprecated and a jobs theme is more compelling.) |
 | **Logging** | Structured JSON to stdout | 12-factor, aggregator-ready. |
 | **Dependency mgmt** | **Poetry** (`package-mode = false`) | Resolved lockfiles for reproducibility; apps not libraries. |
 
@@ -59,14 +59,13 @@ README. Graded on: code quality, architecture, **security**, **performance**,
   "count": 78498, "execution_ms": 42.7, "algorithm": "segmented_sieve" }
 ```
 
-### Task B unified envelope (target)
+### Task B unified envelope (actual)
 ```json
-{ "city": "Lahore",
-  "location": {"lat": 31.55, "lon": 74.34, "country": "Pakistan"},
+{ "company": "stripe",
   "sources": {
-    "weather":     {"status": "ok",    "data": {}},
-    "air_quality": {"status": "ok",    "data": {}},
-    "country":     {"status": "error", "error": "upstream timeout (3s)"}
+    "jobs":        {"status": "ok",    "data": {"open_roles": 496, "sample": []}},
+    "github":      {"status": "ok",    "data": {"public_repos": 0, "followers": 0}},
+    "hacker_news": {"status": "error", "error": "upstream timeout"}
   },
   "meta": {"fetched": 2, "failed": 1, "duration_ms": 312} }
 ```
@@ -82,8 +81,8 @@ Per-source status → partial success; one dead API degrades gracefully.
 | **1** | Identity core: async models + Alembic, Argon2, register/login, RS256 + JWKS, refresh + rotation, `/me`, RBAC | ✅ Done |
 | **2** | Client cross-service auth: JWKS client + cached keys, local validation, protected endpoint, user lookup, 401/403 | ✅ Done |
 | **3** | Task A — analytics (segmented-sieve prime counter, bounded input, timing) | ✅ Done |
-| **4** | Task B — aggregation (4 keyless APIs, concurrent fan-out, partial-success envelope) | ⏳ Next |
-| **5** | Tests: auth flow, RBAC denial, expired/invalid token, Task A correctness+perf, Task B partial-failure | ⬜ |
+| **4** | Task B — aggregation (3 keyless APIs, concurrent fan-out, partial-success envelope) | ✅ Done |
+| **5** | Tests: auth flow, RBAC denial, expired/invalid token, Task A correctness+perf, Task B partial-failure | ⏳ Next |
 | **6** | README + polish (decision write-ups) | ⬜ |
 
 **If time runs short:** trim test breadth → simplify refresh rotation → Task B
@@ -353,3 +352,49 @@ standalone functional services; auth is demonstrated on the /protected routes).
 - ✅ Performance: 10⁶ ≈ 20 ms, 10⁷ ≈ 265 ms, 10⁸ (cap) ≈ 5.4 s, flat memory.
 - ✅ Endpoint: 200 structured response; 422 for end<start / over-cap / negative.
 - (Throwaway scripts removed; formal pytest suite is Phase 5.)
+
+---
+
+### Phase 4 — Task B: Data Aggregation ✅ (completed 2026-06-11)
+
+**Goal:** endpoint that fetches from ≥3 external APIs, handles failures
+gracefully with meaningful errors, and returns a unified response.
+
+**Theme:** **Company Snapshot** — one input (a company slug, e.g. `stripe`),
+three keyless public APIs fanned out concurrently:
+- `jobs`        → Greenhouse `boards-api/v1/boards/{slug}/jobs` (open roles + samples)
+- `github`      → GitHub `api.github.com/orgs/{slug}` (repos, followers, description)
+- `hacker_news` → HN Algolia `hn.algolia.com/api/v1/search?query={slug}` (recent stories)
+
+**Files added (client_app/app):**
+```
+services/aggregation.py  # 3 fetchers + _run_source isolation + build_company_snapshot (asyncio.gather)
+schemas/aggregation.py   # SourceResult, Meta, CompanySnapshot
+api/aggregation.py       # GET /aggregate/company?company=
+```
+`main.py` shared `httpx.AsyncClient` now sets `follow_redirects=True` + a
+`User-Agent` (GitHub rejects requests without one). Endpoint **public**.
+
+**Design notes (async + resilience):**
+- Sources are **independent** ⇒ `asyncio.gather` runs all three concurrently;
+  total latency ≈ slowest call, not the sum. (No prerequisite step.)
+- `_run_source` wraps each call: timeout / HTTP status / network / parse errors
+  become a per-source `{"status":"error","error":...}` ⇒ **partial success**.
+- Endpoint always returns **200** with the unified envelope; per-source failures
+  are reported inside it (not as a top-level error). Empty company → **422**.
+- Envelope: `{company, sources:{name:{status,data|error}}, meta:{fetched,failed,duration_ms}}`.
+
+**Gotcha discovered:** original weather "City Briefing" plan abandoned —
+**REST Countries v3.1 is deprecated** (returns a migrate-to-v5 error), and the
+forecast host had a live 502 during testing. Jobs theme is more compelling and
+all three chosen APIs are stable + keyless.
+
+**Verification (live external APIs via TestClient):**
+- ✅ `company=stripe` → all 3 ok (jobs reported 496 open roles + samples).
+- ✅ `company=google` → **partial success**: jobs 404 (`upstream not found`),
+  github + hacker_news ok; `meta {fetched:2, failed:1}`.
+- ✅ empty company → 422.
+- (Throwaway script removed; formal pytest suite is Phase 5.)
+
+**Note:** unauthenticated GitHub API is rate-limited (~60 req/hr/IP) — fine for
+the assessment; an optional token would raise it (left out to stay keyless).

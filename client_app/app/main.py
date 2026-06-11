@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import FastAPI
 
+from app.api.aggregation import router as aggregation_router
 from app.api.analytics import router as analytics_router
 from app.api.health import router as health_router
 from app.api.protected import router as protected_router
@@ -36,7 +37,13 @@ async def lifespan(app: FastAPI):
     )
     # A single shared HTTP client gives connection pooling across JWKS fetches
     # and service-to-service calls (matters for Task B's concurrent fan-out too).
-    app.state.http_client = httpx.AsyncClient(timeout=settings.http_timeout_seconds)
+    # A descriptive User-Agent is required by some public APIs (e.g. GitHub);
+    # follow_redirects keeps us tolerant of upstreams that 301.
+    app.state.http_client = httpx.AsyncClient(
+        timeout=settings.http_timeout_seconds,
+        follow_redirects=True,
+        headers={"User-Agent": "company-snapshot/1.0 (FastAPI assessment)"},
+    )
     app.state.jwks_client = JWKSClient(settings.jwks_url, app.state.http_client)
     try:
         yield
@@ -55,3 +62,4 @@ app = FastAPI(
 app.include_router(health_router)
 app.include_router(protected_router)
 app.include_router(analytics_router)
+app.include_router(aggregation_router)
