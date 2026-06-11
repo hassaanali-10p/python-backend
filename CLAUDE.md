@@ -80,8 +80,8 @@ Per-source status → partial success; one dead API degrades gracefully.
 |---|---|---|
 | **0** | Foundation: skeletons, docker-compose + Postgres, config, JSON logging, healthchecks | ✅ Done |
 | **1** | Identity core: async models + Alembic, Argon2, register/login, RS256 + JWKS, refresh + rotation, `/me`, RBAC | ✅ Done |
-| **2** | Client cross-service auth: JWKS client + cached keys, local validation, protected endpoint, user lookup, 401/403 | ⏳ Next |
-| **3** | Task A — analytics (segmented-sieve prime counter, pluggable criteria, bounded input, timing) | ⬜ |
+| **2** | Client cross-service auth: JWKS client + cached keys, local validation, protected endpoint, user lookup, 401/403 | ✅ Done |
+| **3** | Task A — analytics (segmented-sieve prime counter, pluggable criteria, bounded input, timing) | ⏳ Next |
 | **4** | Task B — aggregation (4 keyless APIs, concurrent fan-out, partial-success envelope) | ⬜ |
 | **5** | Tests: auth flow, RBAC denial, expired/invalid token, Task A correctness+perf, Task B partial-failure | ⬜ |
 | **6** | README + polish (decision write-ups) | ⬜ |
@@ -276,3 +276,44 @@ JWKS public key; expect `iss=identity-service`, `aud=client-app`; select key by
   from an elevated shell) — otherwise the postgres port mapping won't bind.
 - Test container still running: `docker rm -f assess_pg` to clean up.
 - Poetry local venv uses Python 3.14 (fine); Docker pins 3.11.
+
+---
+
+### Phase 2 — Client cross-service auth ✅ (completed 2026-06-11)
+
+**Goal:** Client App validates Identity's RS256 tokens **locally** via cached
+JWKS public keys (no per-request hop), exposes protected endpoints, and does a
+service-to-service profile lookup.
+
+**Files added (client_app/app):**
+```
+core/jwks.py        # JWKSClient: fetch + cache public keys by kid; refetch on miss; asyncio.Lock
+core/security.py    # verify_access_token: local RS256 verify w/ cached public key (mirrors Identity decode)
+services/identity.py# fetch_user_profile -> Identity GET /me (service-to-service); IdentityServiceError
+api/deps.py         # HTTPBearer(auto_error=False) -> 401; get_current_claims; require_role(*roles)
+api/protected.py    # GET /whoami (from claims), /profile (calls Identity /me), /admin/summary (admin-only)
+```
+`config.py` gained `jwks_path`, `jwt_issuer`, `jwt_audience`, `jwt_algorithm`,
+and a `jwks_url` property. `main.py` lifespan creates a **shared `httpx.AsyncClient`**
+(connection pooling, reused by JWKS fetch + /me calls + future Task B) and a
+`JWKSClient`, both on `app.state`.
+
+**Design decisions:**
+- **Local validation, no hot-path network call.** JWKS fetched once, cached by
+  `kid`; refetch only on a cache miss (unknown `kid` ⇒ handles key rotation).
+  `asyncio.Lock` prevents a fetch stampede. Public key built via
+  `jwt.algorithms.RSAAlgorithm.from_jwk`.
+- **Authorization from the token's `role` claim** — no DB, no lookup (client is
+  stateless).
+- **HTTPBearer (not OAuth2PasswordBearer)** — client is a resource server, not a
+  token issuer; Swagger shows a "paste your token" box. `auto_error=False` so a
+  missing header returns **401** (+ `WWW-Authenticate: Bearer`), not FastAPI's 403.
+- **User lookup** = the one deliberate call to Identity (`/me`), only when full
+  profile is needed; failures map to **502** with a clear message.
+
+**Verification (Identity live on :8001 + Postgres :5433; client via TestClient):**
+- ✅ 7/7 checks PASS: `/whoami` 401-no-token / 401-garbage / 401-tampered (sig fail)
+  / 200-valid-user; `/profile` 200 (fetches Identity `/me`); `/admin/summary`
+  403-as-user & 200-as-admin.
+- ✅ Logs confirm JWKS fetched **once** then served from cache (no per-request hop).
+- (Throwaway script, removed; formal pytest suite is Phase 5.)

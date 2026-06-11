@@ -9,10 +9,13 @@ Aggregation (Task B) services.
 import logging
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
 
 from app.api.health import router as health_router
+from app.api.protected import router as protected_router
 from app.core.config import get_settings
+from app.core.jwks import JWKSClient
 from app.core.logging import configure_logging
 
 settings = get_settings()
@@ -22,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(app: FastAPI):
     logger.info(
         "client-app starting",
         extra={
@@ -30,8 +33,15 @@ async def lifespan(_: FastAPI):
             "identity_service_url": settings.identity_service_url,
         },
     )
-    yield
-    logger.info("client-app shutting down")
+    # A single shared HTTP client gives connection pooling across JWKS fetches
+    # and service-to-service calls (matters for Task B's concurrent fan-out too).
+    app.state.http_client = httpx.AsyncClient(timeout=settings.http_timeout_seconds)
+    app.state.jwks_client = JWKSClient(settings.jwks_url, app.state.http_client)
+    try:
+        yield
+    finally:
+        await app.state.http_client.aclose()
+        logger.info("client-app shutting down")
 
 
 app = FastAPI(
@@ -42,3 +52,4 @@ app = FastAPI(
 )
 
 app.include_router(health_router)
+app.include_router(protected_router)
