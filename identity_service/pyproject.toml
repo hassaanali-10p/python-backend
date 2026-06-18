@@ -17,7 +17,7 @@ dependencies = [
     "alembic (>=1.13)",
     # Auth: RS256 JWT signing + Argon2 password hashing
     "pyjwt[crypto] (>=2.9)",
-    "cryptography (>=43)",
+    "cryptography (>=49.0.0)",
     "pwdlib[argon2] (>=0.2)",
     # OAuth2 password form parsing
     "python-multipart (>=0.0.9)",
