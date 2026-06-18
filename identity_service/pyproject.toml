@@ -12,7 +12,7 @@ dependencies = [
     # Email validation for Pydantic EmailStr
     "email-validator (>=2.2)",
     # Database: async SQLAlchemy + Postgres driver + migrations
-    "sqlalchemy[asyncio] (>=2.0.30)",
+    "sqlalchemy[asyncio] (>=2.0.51)",
     "asyncpg (>=0.29)",
     "alembic (>=1.13)",
     # Auth: RS256 JWT signing + Argon2 password hashing
