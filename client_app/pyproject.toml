@@ -5,7 +5,7 @@ description = "Resource server: token-protected endpoints, analytics (Task A), a
 requires-python = ">=3.11,<4.0"
 dependencies = [
     # Web framework
-    "fastapi (>=0.115,<1.0)",
+    "fastapi (>=0.137.1,<1.0)",
     "uvicorn[standard] (>=0.30)",
     # Configuration
     "pydantic-settings (>=2.4)",
