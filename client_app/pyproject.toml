@@ -6,7 +6,7 @@ requires-python = ">=3.11,<4.0"
 dependencies = [
     # Web framework
     "fastapi (>=0.115,<1.0)",
-    "uvicorn[standard] (>=0.30)",
+    "uvicorn[standard] (>=0.51.0)",
     # Configuration
     "pydantic-settings (>=2.4)",
     # Outbound HTTP: external APIs (Task B) + inter-service calls to Identity
